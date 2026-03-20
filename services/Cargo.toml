@@ -1,0 +1,8 @@
+[workspace]
+resolver = "3"
+members = ["auth-user-service", "code-execution-service","crdt-sync-service","session-gateway-service"]
+
+[workspace.dependencies]
+tokio = { version = "1.28.2", features = ["full"] }
+tokio-tungstenite = "0.28"
+axum = "0.6.18"
