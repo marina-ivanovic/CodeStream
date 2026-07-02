@@ -4,3 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "macros", "uuid", "migrate"] }
+argon2 = "0.5"
+serde = { version = "1.0", features = ["derive"] }
+shared = { path = "../shared" }
+dotenvy = "0.15.7"
+uuid = { version = "1.11", features = ["v4", "serde"] }
