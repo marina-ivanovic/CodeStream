@@ -40,8 +40,8 @@ async fn main() {
         .route("/login", post(login_user))
         .route("/me", get(me))
         .route("/projects", post(create_project).get(list_projects))
-        .route("/projects/{id}", get(get_project).delete(delete_project))
-        .route("/projects/{id}/access", post(grant_access))
+        .route("/projects/:id", get(get_project).delete(delete_project))
+        .route("/projects/:id/access", post(grant_access))
         .with_state(shared_state);
 
     let addr = "0.0.0.0:3000";
