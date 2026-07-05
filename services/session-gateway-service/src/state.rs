@@ -14,15 +14,17 @@ pub struct AppState {
     pub rooms: Arc<RwLock<HashMap<Uuid, broadcast::Sender<String>>>>,
     pub jwt_secret: String,
     pub auth_service_url: String,
+    pub crdt_sync_url: String,
     pub http_client: reqwest::Client,
 }
 
 impl AppState {
-    pub fn new(jwt_secret: String, auth_service_url: String) -> Self {
+    pub fn new(jwt_secret: String, auth_service_url: String, crdt_sync_url: String) -> Self {
         Self {
             rooms: Arc::new(RwLock::new(HashMap::new())),
             jwt_secret,
             auth_service_url,
+            crdt_sync_url,
             http_client: reqwest::Client::new(),
         }
     }
