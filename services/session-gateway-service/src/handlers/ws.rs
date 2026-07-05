@@ -1,6 +1,6 @@
 use axum::{
-    extract::{Path, Query, State, WebSocketUpgrade},
     extract::ws::{Message, WebSocket},
+    extract::{Path, Query, State, WebSocketUpgrade},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -11,44 +11,43 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-/// Query parameters required to initiate a WebSocket connection.
-/// The JWT is passed here because the browser WebSocket API does not
-/// support custom HTTP headers during the upgrade handshake.
 #[derive(Deserialize)]
 pub struct WsQuery {
     pub token: String,
 }
 
-/// Thin wrapper placed around every outgoing broadcast message so the
-/// frontend can display which collaborator produced each operation.
+/// Wrapper added around every broadcast message so the frontend can
+/// identify which collaborator produced each operation.
 #[derive(Serialize)]
-struct BroadcastEnvelope<'a> {
+struct BroadcastEnvelope {
     from: Uuid,
-    data: &'a serde_json::Value,
+    data: serde_json::Value,
 }
 
-/// HTTP upgrade handler: authenticates the caller, checks project access,
-/// then hands the socket off to `handle_socket`.
+/// Payload forwarded from session-gateway to crdt-sync-service.
+#[derive(Serialize)]
+struct CrdtApplyRequest {
+    operation: serde_json::Value,
+}
+
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     Path(project_id): Path<Uuid>,
     Query(params): Query<WsQuery>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    // Validate JWT locally using the shared secret — no DB call needed.
     let claims = shared::auth::verify_jwt(&params.token, &state.jwt_secret)
         .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid or expired token".to_string()))?;
 
-    // Verify that the authenticated user actually has access to this project
-    // by calling the auth-user-service REST API.
     check_project_access(&state, &params.token, project_id).await?;
 
     let user_id = claims.sub;
-    Ok(ws.on_upgrade(move |socket| handle_socket(socket, project_id, user_id, state)))
+    // Clone the token so it can be moved into the socket task for forwarding to crdt-sync.
+    let token = params.token.clone();
+
+    Ok(ws.on_upgrade(move |socket| handle_socket(socket, project_id, user_id, token, state)))
 }
 
-/// Verifies project access by calling the auth service.
-/// Returns Ok if the user has at least read access, Err otherwise.
 async fn check_project_access(
     state: &AppState,
     token: &str,
@@ -76,17 +75,38 @@ async fn check_project_access(
     }
 }
 
-/// Runs for the lifetime of a single WebSocket connection.
-/// Uses tokio::select! to multiplex:
-///   - messages arriving FROM this client → published to the room broadcast channel
-///   - messages arriving FROM the broadcast channel → forwarded to this client
-///
-/// When crdt-sync-service is integrated (task #3 / #5), the "forward to broadcast"
-/// step will be replaced by "publish to RabbitMQ → receive resolved op → broadcast".
+/// Forwards a raw client operation to crdt-sync-service and returns
+/// the resolved operation JSON, or None if the call failed.
+async fn forward_to_crdt_sync(
+    state: &AppState,
+    token: &str,
+    project_id: Uuid,
+    operation: serde_json::Value,
+) -> Option<serde_json::Value> {
+    let url = format!("{}/documents/{}/apply", state.crdt_sync_url, project_id);
+
+    let response = state
+        .http_client
+        .post(&url)
+        .bearer_auth(token)
+        .json(&CrdtApplyRequest { operation })
+        .send()
+        .await
+        .ok()?;
+
+    if !response.status().is_success() {
+        return None;
+    }
+
+    let body: serde_json::Value = response.json().await.ok()?;
+    Some(body)
+}
+
 async fn handle_socket(
     mut socket: WebSocket,
     project_id: Uuid,
     user_id: Uuid,
+    token: String,
     state: Arc<AppState>,
 ) {
     let tx = state.get_or_create_room(project_id).await;
@@ -94,33 +114,28 @@ async fn handle_socket(
 
     loop {
         tokio::select! {
-            // Inbound: message from this client.
             incoming = socket.recv() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
-                        // Parse the raw text as JSON so we can re-wrap it with
-                        // the sender's identity before broadcasting.
-                        match serde_json::from_str::<serde_json::Value>(&text) {
-                            Ok(payload) => {
-                                let envelope = BroadcastEnvelope { from: user_id, data: &payload };
-                                if let Ok(serialized) = serde_json::to_string(&envelope) {
-                                    // Ignore send errors — they only mean no receivers yet.
-                                    let _ = tx.send(serialized);
-                                }
-                            }
-                            Err(_) => {
-                                // Malformed JSON from client — silently drop.
+                        // Parse the client message as a CRDT operation.
+                        let Ok(operation) = serde_json::from_str::<serde_json::Value>(&text) else {
+                            continue; // ignore malformed JSON
+                        };
+
+                        // Send to crdt-sync-service; it assigns char_ids and returns
+                        // the resolved operation that all clients must apply.
+                        if let Some(resolved) = forward_to_crdt_sync(&state, &token, project_id, operation).await {
+                            let envelope = BroadcastEnvelope { from: user_id, data: resolved };
+                            if let Ok(serialized) = serde_json::to_string(&envelope) {
+                                let _ = tx.send(serialized);
                             }
                         }
                     }
-                    // Client closed the connection or sent an unrecoverable error.
                     Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
-                    // Ping/Pong/Binary frames — not used in this protocol.
                     _ => {}
                 }
             }
 
-            // Outbound: message from another client via broadcast channel.
             outgoing = rx.recv() => {
                 match outgoing {
                     Ok(msg) => {
@@ -128,16 +143,13 @@ async fn handle_socket(
                             break;
                         }
                     }
-                    // Channel closed (all senders dropped) — should not happen normally.
                     Err(broadcast::error::RecvError::Closed) => break,
-                    // This receiver fell too far behind; skip missed messages and continue.
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
                 }
             }
         }
     }
 
-    // Drop the receiver before checking count so the count is accurate.
     drop(rx);
     state.cleanup_room_if_empty(project_id).await;
 }
