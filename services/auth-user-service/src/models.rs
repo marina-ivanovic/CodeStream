@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -42,6 +43,7 @@ pub struct ProjectRow {
     pub id: Uuid,
     pub name: String,
     pub owner_id: Uuid,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
@@ -51,6 +53,7 @@ pub struct ProjectResponse {
     pub owner_id: Uuid,
     /// "owner" | "read" | "write"
     pub role: String,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Deserialize)]
