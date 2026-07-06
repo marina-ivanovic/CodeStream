@@ -1,0 +1,25 @@
+{
+  "name": "codestream-frontend",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@uiw/react-codemirror": "^4.23.0",
+    "@codemirror/lang-python": "^6.1.6",
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/view": "^6.35.3",
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/theme-one-dark": "^6.1.2",
+    "jspdf": "^2.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.11"
+  }
+}
