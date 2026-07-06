@@ -4,7 +4,9 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use lapin::{options::BasicPublishOptions, BasicProperties};
 use serde::{Deserialize, Serialize};
+use shared::rabbitmq::{CrdtOperationMessage, CRDT_OPERATIONS_QUEUE};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use uuid::Uuid;
@@ -23,11 +25,6 @@ struct BroadcastEnvelope {
     data: serde_json::Value,
 }
 
-#[derive(Serialize)]
-struct CrdtApplyRequest {
-    operation: serde_json::Value,
-}
-
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     Path(project_id): Path<Uuid>,
@@ -41,10 +38,9 @@ pub async fn ws_handler(
 
     let user_id = claims.sub;
     let email   = claims.email.clone();
-    let token   = params.token.clone();
 
     Ok(ws.on_upgrade(move |socket| {
-        handle_socket(socket, project_id, user_id, email, role, token, state)
+        handle_socket(socket, project_id, user_id, email, role, state)
     }))
 }
 
@@ -82,37 +78,12 @@ async fn check_project_access(
     }
 }
 
-async fn forward_to_crdt_sync(
-    state: &AppState,
-    token: &str,
-    project_id: Uuid,
-    operation: serde_json::Value,
-) -> Option<serde_json::Value> {
-    let url = format!("{}/documents/{}/apply", state.crdt_sync_url, project_id);
-
-    let response = state
-        .http_client
-        .post(&url)
-        .bearer_auth(token)
-        .json(&CrdtApplyRequest { operation })
-        .send()
-        .await
-        .ok()?;
-
-    if !response.status().is_success() {
-        return None;
-    }
-
-    response.json::<serde_json::Value>().await.ok()
-}
-
 async fn handle_socket(
     mut socket: WebSocket,
     project_id: Uuid,
     user_id: Uuid,
     email: String,
     role: String,
-    token: String,
     state: Arc<AppState>,
 ) {
     let is_writable = role == "owner" || role == "write";
@@ -150,7 +121,6 @@ async fn handle_socket(
                             if let Ok(s) = serde_json::to_string(&envelope) {
                                 let _ = tx.send(s);
                             }
-
                         } else if msg_type == "disconnect" {
                             let envelope = BroadcastEnvelope {
                                 from: user_id,
@@ -162,17 +132,23 @@ async fn handle_socket(
                             }
                             break;
                         } else if is_writable {
-                            if let Some(resolved) =
-                                forward_to_crdt_sync(&state, &token, project_id, msg).await
-                            {
-                                let envelope = BroadcastEnvelope {
-                                    from: user_id,
-                                    from_email: email.clone(),
-                                    data: resolved,
-                                };
-                                if let Ok(s) = serde_json::to_string(&envelope) {
-                                    let _ = tx.send(s);
-                                }
+                            let op_msg = CrdtOperationMessage {
+                                project_id,
+                                user_id,
+                                email: email.clone(),
+                                operation: msg,
+                            };
+                            if let Ok(payload) = serde_json::to_vec(&op_msg) {
+                                let _ = state
+                                    .rabbit_channel
+                                    .basic_publish(
+                                        "",
+                                        CRDT_OPERATIONS_QUEUE,
+                                        BasicPublishOptions::default(),
+                                        &payload,
+                                        BasicProperties::default(),
+                                    )
+                                    .await;
                             }
                         }
                     }

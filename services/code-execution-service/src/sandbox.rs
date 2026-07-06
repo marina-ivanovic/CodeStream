@@ -110,7 +110,6 @@ pub async fn run_in_sandbox(
 
     let start = Instant::now();
 
-    // Wait for the container to exit, enforcing a hard time limit.
     let timed_out = timeout(Duration::from_secs(timeout_seconds), async {
         let mut stream = docker.wait_container(
             &container_id,
@@ -133,7 +132,6 @@ pub async fn run_in_sandbox(
         return Err(SandboxError::Timeout(timeout_seconds));
     }
 
-    // Collect stdout and stderr from container logs.
     let mut stdout = String::new();
     let mut stderr = String::new();
 

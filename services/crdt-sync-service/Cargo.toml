@@ -13,3 +13,5 @@ shared = { path = "../shared" }
 tower-http = { workspace = true }
 dotenvy = "0.15.7"
 uuid = { version = "1.11", features = ["v4", "serde"] }
+lapin = "2"
+futures-util = "0.3"

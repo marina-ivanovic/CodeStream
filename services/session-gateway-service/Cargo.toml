@@ -13,3 +13,5 @@ tower-http = { workspace = true }
 dotenvy = "0.15.7"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 reqwest = { version = "0.12", features = ["json"] }
+lapin = "2"
+futures-util = "0.3"
