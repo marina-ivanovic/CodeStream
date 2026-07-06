@@ -1,0 +1,115 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: codestream
+      POSTGRES_PASSWORD: codestream
+      POSTGRES_DB: codestream
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codestream"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+
+  # ── Microservices ──
+  auth-user-service:
+    build:
+      context: ./services
+      dockerfile: auth-user-service/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://codestream:codestream@postgres:5432/codestream
+      JWT_SECRET: ${JWT_SECRET:-codestream_dev_secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  session-gateway-service:
+    build:
+      context: ./services
+      dockerfile: session-gateway-service/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-codestream_dev_secret}
+      AUTH_SERVICE_URL: http://auth-user-service:3000
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/%2f
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      auth-user-service:
+        condition: service_started
+
+  crdt-sync-service:
+    build:
+      context: ./services
+      dockerfile: crdt-sync-service/Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      REDIS_URL: redis://redis:6379
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/%2f
+      JWT_SECRET: ${JWT_SECRET:-codestream_dev_secret}
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  code-execution-service:
+    build:
+      context: ./services
+      dockerfile: code-execution-service/Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-codestream_dev_secret}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # ── Frontend ──
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5500:80"
+    depends_on:
+      - auth-user-service
+      - session-gateway-service
+      - crdt-sync-service
+      - code-execution-service
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:

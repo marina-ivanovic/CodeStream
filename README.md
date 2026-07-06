@@ -49,6 +49,102 @@ U skladu sa zahtevima predmeta, sistem je projektovan kao mikroservisna aplikaci
 
 ---
 
+# Pokretanje Aplikacije
+
+## Preduslovi
+
+* [Docker](https://www.docker.com/) i Docker Compose (v2)
+
+## Pokretanje sa Docker Compose (preporučeno)
+
+```bash
+# Klonirati repozitorijum i pozicionirati se u root folder projekta
+git clone <repo-url>
+cd CodeStream
+
+# Pokrenuti sve servise (infrastruktura + mikroservisi + frontend)
+docker compose up -d
+```
+
+Docker Compose automatski podiže:
+- PostgreSQL, Redis i RabbitMQ (infrastruktura)
+- Sva 4 Rust mikroservisa
+- React frontend serviovan kroz nginx
+
+Sačekati ~30 sekundi da RabbitMQ završi inicijalizaciju. Status svih kontejnera:
+
+```bash
+docker compose ps
+```
+
+## Dostupni servisi
+
+| Servis | URL |
+|---|---|
+| **Frontend** | http://localhost:5500 |
+| Auth & User Service | http://localhost:3000 |
+| Session Gateway (WebSocket) | ws://localhost:3001 |
+| CRDT Sync Service | http://localhost:3002 |
+| Code Execution Service | http://localhost:3003 |
+| RabbitMQ Management UI | http://localhost:15672 (guest / guest) |
+
+## Zaustavljanje
+
+```bash
+# Zaustaviti kontejnere (podaci ostaju sačuvani u Docker volumima)
+docker compose down
+
+# Zaustaviti i obrisati sve podatke (baza, Redis, RabbitMQ)
+docker compose down -v
+```
+
+## Lokalni razvoj (bez Docker-a)
+
+Zahteva lokalno instalirane: PostgreSQL, Redis, RabbitMQ.
+
+Kreirati `.env` fajlove u svakom servis-folderu:
+
+**`services/auth-user-service/.env`**
+```
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/codestream
+JWT_SECRET=codestream_dev_secret
+```
+
+**`services/session-gateway-service/.env`**
+```
+JWT_SECRET=codestream_dev_secret
+AUTH_SERVICE_URL=http://localhost:3000
+AMQP_URL=amqp://guest:guest@localhost:5672/%2f
+```
+
+**`services/crdt-sync-service/.env`**
+```
+REDIS_URL=redis://localhost:6379
+AMQP_URL=amqp://guest:guest@localhost:5672/%2f
+JWT_SECRET=codestream_dev_secret
+```
+
+**`services/code-execution-service/.env`**
+```
+JWT_SECRET=codestream_dev_secret
+```
+
+Pokretanje servisa:
+
+```bash
+# Svaki servis u posebnom terminalu, iz foldera services/
+cargo run --bin auth-user-service
+cargo run --bin session-gateway-service
+cargo run --bin crdt-sync-service
+cargo run --bin code-execution-service
+
+# Frontend (iz foldera frontend/)
+npm install
+npm run dev        # http://localhost:5173
+```
+
+---
+
 # Plan za Diplomski Rad (Proširenje)
 
 Nakon uspešne odbrane projektnog zadatka, planirano je proširenje sistema u diplomski rad pod naslovom:
