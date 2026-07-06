@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use shared::AuthUser;
 use uuid::Uuid;
 
-use crate::rga::{ClientOperation, ResolvedOperation, RgaDocument};
+use crate::rga::{ClientOperation, ResolvedOperation, RgaChar, RgaDocument};
 use crate::state::AppState;
 
 #[derive(Deserialize)]
@@ -19,9 +19,8 @@ pub struct ApplyResponse {
 }
 
 #[derive(Serialize)]
-pub struct DocumentResponse {
-    pub document_text: String,
-    pub char_count: usize,
+pub struct DocumentStateResponse {
+    pub chars: Vec<RgaChar>,
 }
 
 fn doc_key(doc_id: Uuid) -> String {
@@ -81,20 +80,11 @@ pub async fn apply_operation(
     ))
 }
 
-pub async fn get_document(
+pub async fn get_document_state(
     State(mut state): State<AppState>,
     AuthUser(_claims): AuthUser,
     Path(doc_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let doc = load_document(&mut state.redis, doc_id).await?;
-    let text = doc.text();
-    let char_count = text.chars().count();
-
-    Ok((
-        StatusCode::OK,
-        Json(DocumentResponse {
-            document_text: text,
-            char_count,
-        }),
-    ))
+    Ok((StatusCode::OK, Json(DocumentStateResponse { chars: doc.chars })))
 }
