@@ -49,7 +49,7 @@ pub struct ProjectResponse {
     pub id: Uuid,
     pub name: String,
     pub owner_id: Uuid,
-    /// "owner" | "read" | "write" - resolved relative to the caller, not stored as-is.
+    /// "owner" | "read" | "write"
     pub role: String,
 }
 

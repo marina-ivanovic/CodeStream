@@ -5,10 +5,6 @@ use uuid::Uuid;
 
 pub const ROOM_CHANNEL_CAPACITY: usize = 256;
 
-/// Shared state across all WebSocket connections.
-/// `rooms` maps project_id → broadcast sender for that room.
-/// When a client sends a message it is published to the sender;
-/// every subscriber (other connected clients) receives it automatically.
 #[derive(Clone)]
 pub struct AppState {
     pub rooms: Arc<RwLock<HashMap<Uuid, broadcast::Sender<String>>>>,
@@ -29,7 +25,6 @@ impl AppState {
         }
     }
 
-    /// Returns the broadcast sender for the given room, creating it if needed.
     pub async fn get_or_create_room(&self, project_id: Uuid) -> broadcast::Sender<String> {
         let mut rooms = self.rooms.write().await;
         rooms
@@ -41,7 +36,6 @@ impl AppState {
             .clone()
     }
 
-    /// Removes a room once no receivers remain (last client disconnected).
     pub async fn cleanup_room_if_empty(&self, project_id: Uuid) {
         let mut rooms = self.rooms.write().await;
         if let Some(tx) = rooms.get(&project_id) {

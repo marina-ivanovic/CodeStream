@@ -7,10 +7,6 @@ use uuid::Uuid;
 use crate::rga::{ClientOperation, ResolvedOperation, RgaDocument};
 use crate::state::AppState;
 
-// ---------------------------------------------------------------------------
-// Request / response types
-// ---------------------------------------------------------------------------
-
 #[derive(Deserialize)]
 pub struct ApplyRequest {
     pub operation: ClientOperation,
@@ -27,10 +23,6 @@ pub struct DocumentResponse {
     pub document_text: String,
     pub char_count: usize,
 }
-
-// ---------------------------------------------------------------------------
-// Redis helpers
-// ---------------------------------------------------------------------------
 
 fn doc_key(doc_id: Uuid) -> String {
     format!("doc:{doc_id}")
@@ -66,14 +58,6 @@ async fn save_document(
         .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "Redis SET failed".to_string()))
 }
 
-// ---------------------------------------------------------------------------
-// Handlers
-// ---------------------------------------------------------------------------
-
-/// Applies a client operation to the RGA document and returns the resolved
-/// operation (with server-assigned `char_id`) plus the new visible text.
-/// The caller (session-gateway) then broadcasts the resolved operation so
-/// every connected client applies the exact same, clock-stamped change.
 pub async fn apply_operation(
     State(mut state): State<AppState>,
     AuthUser(claims): AuthUser,
@@ -97,7 +81,6 @@ pub async fn apply_operation(
     ))
 }
 
-/// Returns the current visible text and character count for a document.
 pub async fn get_document(
     State(mut state): State<AppState>,
     AuthUser(_claims): AuthUser,

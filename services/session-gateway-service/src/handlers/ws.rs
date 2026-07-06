@@ -16,15 +16,12 @@ pub struct WsQuery {
     pub token: String,
 }
 
-/// Wrapper added around every broadcast message so the frontend can
-/// identify which collaborator produced each operation.
 #[derive(Serialize)]
 struct BroadcastEnvelope {
     from: Uuid,
     data: serde_json::Value,
 }
 
-/// Payload forwarded from session-gateway to crdt-sync-service.
 #[derive(Serialize)]
 struct CrdtApplyRequest {
     operation: serde_json::Value,
@@ -42,7 +39,6 @@ pub async fn ws_handler(
     check_project_access(&state, &params.token, project_id).await?;
 
     let user_id = claims.sub;
-    // Clone the token so it can be moved into the socket task for forwarding to crdt-sync.
     let token = params.token.clone();
 
     Ok(ws.on_upgrade(move |socket| handle_socket(socket, project_id, user_id, token, state)))
@@ -75,8 +71,6 @@ async fn check_project_access(
     }
 }
 
-/// Forwards a raw client operation to crdt-sync-service and returns
-/// the resolved operation JSON, or None if the call failed.
 async fn forward_to_crdt_sync(
     state: &AppState,
     token: &str,
@@ -117,13 +111,10 @@ async fn handle_socket(
             incoming = socket.recv() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
-                        // Parse the client message as a CRDT operation.
                         let Ok(operation) = serde_json::from_str::<serde_json::Value>(&text) else {
-                            continue; // ignore malformed JSON
+                            continue;
                         };
 
-                        // Send to crdt-sync-service; it assigns char_ids and returns
-                        // the resolved operation that all clients must apply.
                         if let Some(resolved) = forward_to_crdt_sync(&state, &token, project_id, operation).await {
                             let envelope = BroadcastEnvelope { from: user_id, data: resolved };
                             if let Ok(serialized) = serde_json::to_string(&envelope) {

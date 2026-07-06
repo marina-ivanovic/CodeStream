@@ -82,7 +82,6 @@ pub async fn login_user(
     ))
 }
 
-/// Protected route: proves the `AuthUser` extractor works end-to-end.
 pub async fn me(AuthUser(claims): AuthUser) -> impl IntoResponse {
     Json(UserResponse {
         id: claims.sub,

@@ -109,8 +109,6 @@ pub async fn get_project(
     ))
 }
 
-/// Only the owner can grant access; this is where the Read/Write
-/// authorization model from the README is enforced.
 pub async fn grant_access(
     State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
