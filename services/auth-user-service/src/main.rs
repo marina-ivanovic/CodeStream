@@ -9,6 +9,7 @@ use axum::{
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
 
 use handlers::auth::{login_user, me, register_user};
 use handlers::projects::{create_project, delete_project, get_project, grant_access, list_projects};
@@ -42,6 +43,7 @@ async fn main() {
         .route("/projects", post(create_project).get(list_projects))
         .route("/projects/:id", get(get_project).delete(delete_project))
         .route("/projects/:id/access", post(grant_access))
+        .layer(CorsLayer::permissive())
         .with_state(shared_state);
 
     let addr = "0.0.0.0:3000";
