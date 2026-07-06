@@ -7,6 +7,7 @@ import { EditorView } from '@codemirror/view';
 
 import { remoteCursorsField, setCursorEffect } from '../lib/remoteCursors';
 import { crdt, executeCode, auth, WS_URL } from '../api';
+import { jsPDF } from 'jspdf';
 
 const userColorMap = new Map();
 
