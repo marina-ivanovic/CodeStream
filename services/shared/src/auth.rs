@@ -29,10 +29,6 @@ pub fn verify_jwt(token: &str, secret: &str) -> jsonwebtoken::errors::Result<Cla
         .map(|data| data.claims)
 }
 
-/// Axum extractor: pull the `Authorization: Bearer <token>` header, validate
-/// it against `JWT_SECRET`, and inject the decoded `Claims` into the handler.
-/// Any service that wants authenticated routes just adds `AuthUser` as a
-/// handler argument - no need to re-implement JWT checking per-service.
 pub struct AuthUser(pub Claims);
 
 #[axum::async_trait]
