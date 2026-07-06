@@ -4,6 +4,7 @@ mod state;
 use axum::{routing::get, Router};
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
 
 use handlers::ws::ws_handler;
 use state::AppState;
@@ -21,6 +22,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/ws/:project_id", get(ws_handler))
+        .layer(CorsLayer::permissive())
         .with_state(shared_state);
 
     let addr = "0.0.0.0:3001";

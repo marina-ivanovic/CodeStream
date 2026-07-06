@@ -5,8 +5,9 @@ mod state;
 use axum::{routing::{get, post}, Router};
 use redis::aio::ConnectionManager;
 use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
 
-use handlers::documents::{apply_operation, get_document};
+use handlers::documents::{apply_operation, get_document, get_document_state};
 use state::AppState;
 
 #[tokio::main]
@@ -25,7 +26,9 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/documents/:doc_id", get(get_document))
+        .route("/documents/:doc_id/state", get(get_document_state))
         .route("/documents/:doc_id/apply", post(apply_operation))
+        .layer(CorsLayer::permissive())
         .with_state(shared_state);
 
     let addr = "0.0.0.0:3002";

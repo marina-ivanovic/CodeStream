@@ -4,6 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use chrono::{DateTime, Utc};
 use shared::AuthUser;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -13,22 +14,26 @@ use crate::models::{AccessResponse, CreateProjectRequest, GrantAccessRequest, Pr
 use crate::state::AppState;
 
 async fn fetch_project(db: &PgPool, project_id: Uuid) -> Result<ProjectRow, (StatusCode, String)> {
-    sqlx::query_as::<_, ProjectRow>("SELECT id, name, owner_id FROM projects WHERE id = $1")
-        .bind(project_id)
-        .fetch_optional(db)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Project does not exist".to_string()))
+    sqlx::query_as::<_, ProjectRow>(
+        "SELECT id, name, owner_id, created_at FROM projects WHERE id = $1",
+    )
+    .bind(project_id)
+    .fetch_optional(db)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Project does not exist".to_string()))
 }
 
 async fn fetch_access_role(db: &PgPool, project_id: Uuid, user_id: Uuid) -> Option<String> {
-    sqlx::query_scalar::<_, String>("SELECT role FROM project_access WHERE project_id = $1 AND user_id = $2")
-        .bind(project_id)
-        .bind(user_id)
-        .fetch_optional(db)
-        .await
-        .ok()
-        .flatten()
+    sqlx::query_scalar::<_, String>(
+        "SELECT role FROM project_access WHERE project_id = $1 AND user_id = $2",
+    )
+    .bind(project_id)
+    .bind(user_id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()
 }
 
 pub async fn create_project(
@@ -38,13 +43,15 @@ pub async fn create_project(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let project_id = Uuid::new_v4();
 
-    sqlx::query("INSERT INTO projects (id, name, owner_id) VALUES ($1, $2, $3)")
-        .bind(project_id)
-        .bind(&payload.name)
-        .bind(claims.sub)
-        .execute(&state.db)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Error occurred while creating project".to_string()))?;
+    let created_at: DateTime<Utc> = sqlx::query_scalar(
+        "INSERT INTO projects (id, name, owner_id) VALUES ($1, $2, $3) RETURNING created_at",
+    )
+    .bind(project_id)
+    .bind(&payload.name)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Error occurred while creating project".to_string()))?;
 
     Ok((
         StatusCode::CREATED,
@@ -53,6 +60,7 @@ pub async fn create_project(
             name: payload.name,
             owner_id: claims.sub,
             role: "owner".to_string(),
+            created_at,
         }),
     ))
 }
@@ -61,13 +69,15 @@ pub async fn list_projects(
     State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let rows: Vec<(Uuid, String, Uuid, String)> = sqlx::query_as(
+    let rows: Vec<(Uuid, String, Uuid, String, DateTime<Utc>)> = sqlx::query_as(
         r#"
         SELECT p.id, p.name, p.owner_id,
-               CASE WHEN p.owner_id = $1 THEN 'owner' ELSE pa.role END AS role
+               CASE WHEN p.owner_id = $1 THEN 'owner' ELSE pa.role END AS role,
+               p.created_at
         FROM projects p
         LEFT JOIN project_access pa ON pa.project_id = p.id AND pa.user_id = $1
         WHERE p.owner_id = $1 OR pa.user_id = $1
+        ORDER BY p.created_at DESC
         "#,
     )
     .bind(claims.sub)
@@ -77,7 +87,13 @@ pub async fn list_projects(
 
     let projects: Vec<ProjectResponse> = rows
         .into_iter()
-        .map(|(id, name, owner_id, role)| ProjectResponse { id, name, owner_id, role })
+        .map(|(id, name, owner_id, role, created_at)| ProjectResponse {
+            id,
+            name,
+            owner_id,
+            role,
+            created_at,
+        })
         .collect();
 
     Ok((StatusCode::OK, Json(projects)))
@@ -105,6 +121,7 @@ pub async fn get_project(
             name: project.name,
             owner_id: project.owner_id,
             role,
+            created_at: project.created_at,
         }),
     ))
 }

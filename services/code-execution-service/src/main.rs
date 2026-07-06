@@ -6,6 +6,7 @@ use axum::{routing::{get, post}, Router};
 use bollard::Docker;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
 
 use handlers::execute::execute_code;
 use state::AppState;
@@ -22,6 +23,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/execute", post(execute_code))
+        .layer(CorsLayer::permissive())
         .with_state(shared_state);
 
     let addr = "0.0.0.0:3003";
