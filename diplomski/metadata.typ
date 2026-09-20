@@ -34,19 +34,27 @@
 
 // TODO: Текст задатка добијате од ментора. Овде је дат предлог текста на
 #let zadatak = [
-     #lorem(100)
+
+Пројектовати и реализовати дистрибуирани систем за колаборативно уређивање и извршавање програмског кода у реалном времену. 
+
+Конфликте настале истовременим изменама текста разрешити применом _CRDT_ структуре података засноване на _RGA_ алгоритму. 
+
+Позадински систем имплементирати у програмском језику _Rust_ кроз независне микросервисе повезане путем _HTTP_ протокола и _RabbitMQ_ система порука. 
+
+Обезбедити безбедно извршавање кода унутар _Docker_ контејнера, управљање правима приступа, као и клијентску веб апликацију са интегрисаним едитором кода.
 ]
 
+
 // TODO: Датум одбране и чланове комисије добијате од ментора
-#let datum_odbrane = "01.01.2025"
-#let komisija_predsednik = "Петар Петровић"
+#let datum_odbrane = "23.09.2026"
+#let komisija_predsednik = "Никола Лубурић"
 #let komisija_predsednik_zvanje = "ванредни професор"
-#let komisija_clan = "Марко Марковић"
+#let komisija_clan = "Милан Стојков"
 #let komisija_clan_zvanje = "доцент"
 
 // На енглеском уписати чланове на латиници
-#let komisija_predsednik_eng = "Petar Petrović"
-#let komisija_clan_eng = "Marko Marković"
+#let komisija_predsednik_eng = "Nikola Luburić"
+#let komisija_clan_eng = "Milan Stojkov"
 #let mentor_eng = "Igor Dejanović"
 
 
